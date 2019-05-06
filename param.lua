@@ -15,6 +15,13 @@ TYPES = {
     "struct"
 }
 
+function GET_STRUCT_INDICES_SORTED(struct)
+    local copy = {}
+    for i, h in ipairs(struct.HASHES) do copy[i] = h end
+    table.sort(copy)
+    return copy
+end
+
 function HELP()
     print("args:")
     print("to open:", "'o [file name]'")
@@ -171,13 +178,6 @@ else
         tbl[i] = value
     end
 
-    local function get_sorted_indices(struct)
-        local copy = {}
-        for i, h in ipairs(struct.HASHES) do copy[i] = h end
-        table.sort(copy)
-        return copy
-    end
-
     local function parse_hashes(param)
         if param.TYPE == "struct" then
             for hash, node in ipairs(param.HASHES) do
@@ -195,10 +195,31 @@ else
 
     local write_param, write_struct, write_list, write_value
 
+    write_param = function(param)
+        local t = param.TYPE
+        writer.byte(indexof(TYPES, t))
+
+        if t == "struct" then
+            write_struct(param)
+        elseif t == "list" then
+            write_list(param)
+        else
+            write_value(param)
+        end
+    end
+
     write_struct = function(struct)
-        for _, hash in ipairs(get_sorted_indices(struct)) do
+        for _, hash in ipairs(GET_STRUCT_INDICES_SORTED(struct)) do
             local node = struct.NODES[hash]
         end
+    end
+
+    write_list = function(list)
+        print("stub")
+    end
+
+    write_value = function(value)
+        print("stub")
     end
 
     append_with_check(hashes, 0)
