@@ -15,9 +15,9 @@ TYPES = {
     "struct"
 }
 
-function GET_STRUCT_INDICES_SORTED(struct)
+function GET_SORTED_COPY(tbl)
     local copy = {}
-    for i, h in ipairs(struct.HASHES) do copy[i] = h end
+    for i, h in ipairs(tbl) do copy[i] = h end
     table.sort(copy)
     return copy
 end
@@ -163,6 +163,7 @@ else
     local PARAM_FILE = arg[3]
     local hashes = {}
     local ref_entries = {}
+    local unresolved = {}
 
     local function indexof(tbl, value)
         for i, v in ipairs(tbl) do
@@ -198,7 +199,6 @@ else
     write_param = function(param)
         local t = param.TYPE
         writer.byte(indexof(TYPES, t))
-
         if t == "struct" then
             write_struct(param)
         elseif t == "list" then
@@ -209,13 +209,36 @@ else
     end
 
     write_struct = function(struct)
-        for _, hash in ipairs(GET_STRUCT_INDICES_SORTED(struct)) do
-            local node = struct.NODES[hash]
+        local start = f:seek() - 1
+        local ref_entry = {cor_struct = struct}
+        table.insert(ref_entries, ref_entry)
+        writer.int(#struct.NODES)
+        -- add the unresolved ref_entry offset stuff here
+        writer.int(0)
+        for index, hash in ipairs(GET_SORTED_COPY(struct.HASHES)) do
+            ref_entry[index] = {
+                hash_ = indexof(hashes, hash),
+                offset_ = f:seek() - start
+            }
+            write_param(struct.NODES[hash])
         end
     end
 
     write_list = function(list)
-        print("stub")
+        local start = f:seek() - 1
+        local len = #list.NODES
+        writer.int(len)
+        f:seek("cur", len * 4)
+        for index, node in ipairs(list.NODES) do
+            -- record the position where we will write the param
+            -- go backward into the list's offsets and write the relative offset
+            -- go forward again and write the param
+            local param_pos = f:seek()
+            f:seek("set", start + 1 + index * 4)
+            writer.int(param_pos - start)
+            f:seek("set", param_pos)
+            write_param(node)
+        end
     end
 
     write_value = function(value)
