@@ -118,28 +118,28 @@ if mode == "o" then
         return list
     end
 
-    read_value = function(_type)
-        assert(type(_type) == "string", "this shouldn't fail")
-        local param = {TYPE = _type}
-        if _type == "bool" then
+    read_value = function(type_)
+        assert(type(type_) == "string", "this shouldn't fail")
+        local param = {TYPE = type_}
+        if type_ == "bool" then
             param.VALUE = reader.bool()
-        elseif _type == "sbyte" then
+        elseif type_ == "sbyte" then
             param.VALUE = reader.sbyte()
-        elseif _type == "byte" then
+        elseif type_ == "byte" then
             param.VALUE = reader.byte()
-        elseif _type == "short" then
+        elseif type_ == "short" then
             param.VALUE = reader.short()
-        elseif _type == "ushort" then
+        elseif type_ == "ushort" then
             param.VALUE = reader.ushort()
-        elseif _type == "int" then
+        elseif type_ == "int" then
             param.VALUE = reader.int()
-        elseif _type == "uint" then
+        elseif type_ == "uint" then
             param.VALUE = reader.uint()
-        elseif _type == "float" then
+        elseif type_ == "float" then
             param.VALUE = reader.float()
-        elseif _type == "hash40" then
+        elseif type_ == "hash40" then
             param.VALUE = hashes[reader.int() + 1]
-        elseif _type == "string" then
+        elseif type_ == "string" then
             param.VALUE = reader.string(ref_pos)
         end
 
@@ -163,7 +163,8 @@ else
     local PARAM_FILE = arg[3]
     local hashes = {}
     local ref_entries = {}
-    local unresolved = {}
+    local unresolved_structs = {}
+    local unresolved_strings = {}
 
     local function indexof(tbl, value)
         for i, v in ipairs(tbl) do
@@ -171,18 +172,19 @@ else
         end
     end
 
-    local function append_with_check(tbl, value)
+    local function append_no_duplicate(tbl, value)
         local i
         for i = 1, #tbl do
             if tbl[i] == value then return end
         end
+        -- +1?
         tbl[i] = value
     end
 
     local function parse_hashes(param)
         if param.TYPE == "struct" then
             for hash, node in ipairs(param.HASHES) do
-                append_with_check(hashes, hash)
+                append_no_duplicate(hashes, hash)
                 parse_hashes(node)
             end 
         elseif param.TYPE == "list" then
@@ -190,7 +192,7 @@ else
                 parse_hashes(p)
             end
         elseif param.TYPE == "hash40" then
-            append_with_check(hashes, param.VALUE)
+            append_no_duplicate(hashes, param.VALUE)
         end
     end
 
@@ -213,7 +215,13 @@ else
         local ref_entry = {cor_struct = struct}
         table.insert(ref_entries, ref_entry)
         writer.int(#struct.NODES)
-        -- add the unresolved ref_entry offset stuff here
+        -- after all structs are generated (with param offsets/etc)
+        -- we filter down ref_entries and fix each struct's reference to it
+        local dynamic_ref = {
+            pos_ = start + 5,
+            ref_ = ref_entry
+        }
+        table.insert(unresolved_structs, dynamic_ref)
         writer.int(0)
         for index, hash in ipairs(GET_SORTED_COPY(struct.HASHES)) do
             ref_entry[index] = {
@@ -225,28 +233,65 @@ else
     end
 
     write_list = function(list)
-        local start = f:seek() - 1
-        local len = #list.NODES
+        local start, len = f:seek() - 1, #list.NODES
         writer.int(len)
+
+        local offsets = {}
         f:seek("cur", len * 4)
         for index, node in ipairs(list.NODES) do
-            -- record the position where we will write the param
-            -- go backward into the list's offsets and write the relative offset
-            -- go forward again and write the param
-            local param_pos = f:seek()
-            f:seek("set", start + 1 + index * 4)
-            writer.int(param_pos - start)
-            f:seek("set", param_pos)
+            offsets[index] = f:seek() - start
             write_param(node)
         end
+
+        local last = f:seek()
+        f:seek("set", start + 5)
+        for _, n in ipairs(offsets) do
+            writer.int(n)
+        end
+        f:seek("set", last)
     end
 
     write_value = function(value)
+        local type_ = value.TYPE
+        if type_ == "bool" then
+            writer.bool(value.VALUE)
+        elseif type_ == "sbyte" then
+            writer.sbyte(value.VALUE)
+        elseif type_ == "byte" then
+            writer.byte(value.VALUE)
+        elseif type_ == "short" then
+            writer.short(value.VALUE)
+        elseif type_ == "ushort" then
+            writer.ushort(value.VALUE)
+        elseif type_ == "int" then
+            writer.int(value.VALUE)
+        elseif type_ == "uint" then
+            writer.uint(value.VALUE)
+        elseif type_ == "float" then
+            writer.float(value.VALUE)
+        elseif type_ == "hash40" then
+            writer.int(indexof(value.VALUE) - 1)
+        elseif type_ == "string" then
+            local str = value.VALUE
+            append_no_duplicate(ref_entries, str)
+            local dynamic_ref = {
+                pos_ = f:seek(),
+                str_ = str
+            }
+            table.insert(unresolved_strings, dynamic_ref)
+            writer.int(0)
+        end
+    end
+
+    append_no_duplicate(hashes, 0)
+    parse_hashes(PARAM_FILE.ROOT)
+    write_param(PARAM_FILE.ROOT)
+
+    local i = 1
+    while i <= #ref_entries do
         print("stub")
     end
 
-    append_with_check(hashes, 0)
-    parse_hashes(PARAM_FILE.ROOT)
     --f:write("paracobn")
     --writer.int()
 end
