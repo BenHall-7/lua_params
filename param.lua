@@ -26,17 +26,18 @@ function HELP()
     print("args:")
     print("to open:", "'o [file name]'")
     print("to save:", "'s [file name] [param object]")
-    return
 end
 
 if (#arg < 2) then
     HELP()
+    return
 end
 
 local mode, filename = arg[1], arg[2]
 if mode ~= "o" and mode ~= "s" then
     print("invalid arg [#1]: mode")
     HELP()
+    return
 end
 
 if mode == "o" then
@@ -47,12 +48,12 @@ if mode == "o" then
 
     local PARAM_FILE = {}
 
-    -- Read header
+    -- read header
     local hash_pos, hash_size = 0x10, reader:int()
     local ref_pos, ref_size = hash_pos + hash_size, reader:int()
     local param_pos = ref_pos + ref_size
 
-    -- Read hashes
+    -- read hashes
     local hashes = {}
     for i = 1, hash_size / 8 do
         hashes[i] = reader:long()
@@ -159,6 +160,7 @@ if mode == "o" then
 else
     if #arg < 3 then
         HELP()
+        return
     end
 
     local writer = dofile("writer.lua")
@@ -182,12 +184,13 @@ else
         end
     end
 
-    local function table_equals(tbl1, tbl2)
+    local function ref_table_equals(tbl1, tbl2)
         if #tbl1 ~= #tbl2 then
             return false
         else
-            for index, value in ipairs(tbl1) do
-                if tbl2[index] ~= value then
+            for index, sub_tbl1 in ipairs(tbl1) do
+                local sub_tbl2 = tbl2[index]
+                if sub_tbl1.hash_ ~= sub_tbl2.hash_ or sub_tbl1.offset_ ~= sub_tbl2.offset_ then
                     return false
                 end
             end
@@ -303,12 +306,12 @@ else
     -- truncate duplicate ref_entries ; fix the dynamic ref_entry pointer
     for current_index = 1, #ref_entries do
         local a = ref_entries[current_index]
-        for i = current_index - 1, 1, -1 do
-            local b = ref_entries[i]
-            if type(a) == "table" and type(b) == "table" then
-                if table_equals(a, b) then
+        if type(a) == "table" then
+            for i = current_index - 1, 1, -1 do
+                local b = ref_entries[i]
+                if type(b) == "table" and ref_table_equals(a, b) then
                     a.dyn_ref_.ref_ = b
-                    table.remove(current_index)
+                    table.remove(ref_entries, current_index)
                     current_index = current_index - 1
                     break
                 end
@@ -328,17 +331,17 @@ else
     hash_size = main_f:seek() - 0x10
 
     local string_offsets = {}
-    local ref_start = f:seek()
+    local ref_start = main_f:seek()
     for i = 1, #ref_entries do
         local entry = ref_entries[i]
         if type(entry) == "table" then
-            entry.offset_ = f:seek() - ref_start
+            entry.offset_ = main_f:seek() - ref_start
             for _, pair in ipairs(entry) do
                 main_writer.int(pair.hash_ - 1)
                 main_writer.int(pair.offset_)
             end
         elseif type(entry) == "string" then
-            string_offsets[entry] = f:seek() - ref_start
+            string_offsets[entry] = main_f:seek() - ref_start
             main_f:write(entry)
             main_writer.byte(0)
         end 
@@ -348,7 +351,6 @@ else
     for _, dyn_ref in ipairs(unresolved_structs) do
         f:seek("set", dyn_ref.pos_)
         writer.int(dyn_ref.ref_.offset_)
-        dyn_ref.ref_.offset_ = nil
     end
 
     for _, i in ipairs(unresolved_strings) do
