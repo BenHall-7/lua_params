@@ -202,7 +202,7 @@ else
                 parse_hashes(param.NODES[hash])
             end 
         elseif param.TYPE == "list" then
-            for _, p in ipairs(param) do
+            for _, p in ipairs(param.NODES) do
                 parse_hashes(p)
             end
         elseif param.TYPE == "hash40" then
@@ -334,7 +334,7 @@ else
         if type(entry) == "table" then
             entry.offset_ = f:seek() - ref_start
             for _, pair in ipairs(entry) do
-                main_writer.int(indexof(hashes, pair.hash_) - 1)
+                main_writer.int(pair.hash_ - 1)
                 main_writer.int(pair.offset_)
             end
         elseif type(entry) == "string" then
