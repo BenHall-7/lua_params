@@ -34,9 +34,13 @@ if (#arg < 2) then
 end
 
 local mode, filename = arg[1], arg[2]
-assert(mode == "o" or mode == "s", "invalid arg [#1]: mode")
+if mode ~= "o" and mode ~= "s" then
+    print("invalid arg [#1]: mode")
+    HELP()
+end
+
 if mode == "o" then
-    local reader = require("reader")
+    local reader = dofile("reader.lua")
     local f = reader.open_read(filename)
     assert(f:read(8) == 'paracobn', "file '"..filename.."' contains invalid header")
     reader.file = f
@@ -157,7 +161,7 @@ else
         HELP()
     end
 
-    local writer = require("writer")
+    local writer = dofile("writer.lua")
     local f = writer.open_write("param_data.temp")
 
     local PARAM_FILE = arg[3]
@@ -173,16 +177,12 @@ else
     end
 
     local function append_no_duplicate(tbl, value)
-        local i
-        for i = 1, #tbl do
-            if tbl[i] == value then return end
+        if indexof(tbl, value) == nil then
+            table.insert(tbl, value)
         end
-        -- +1?
-        tbl[i] = value
     end
 
     local function table_equals(tbl1, tbl2)
-        print("stub")
         if #tbl1 ~= #tbl2 then
             return false
         else
@@ -197,9 +197,9 @@ else
 
     local function parse_hashes(param)
         if param.TYPE == "struct" then
-            for hash, node in ipairs(param.HASHES) do
+            for _, hash in ipairs(param.HASHES) do
                 append_no_duplicate(hashes, hash)
-                parse_hashes(node)
+                parse_hashes(param.NODES[hash])
             end 
         elseif param.TYPE == "list" then
             for _, p in ipairs(param) do
@@ -283,7 +283,7 @@ else
         elseif type_ == "float" then
             writer.float(value.VALUE)
         elseif type_ == "hash40" then
-            writer.int(indexof(value.VALUE) - 1)
+            writer.int(indexof(hashes, value.VALUE) - 1)
         elseif type_ == "string" then
             local str = value.VALUE
             append_no_duplicate(ref_entries, str)
@@ -316,7 +316,7 @@ else
         end
     end
 
-    local main_writer = require("writer")
+    local main_writer = dofile("writer.lua")
     local main_f = main_writer.open_write(filename)
 
     main_f:write("paracobn")
