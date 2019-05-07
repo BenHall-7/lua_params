@@ -181,6 +181,20 @@ else
         tbl[i] = value
     end
 
+    local function table_equals(tbl1, tbl2)
+        print("stub")
+        if #tbl1 ~= #tbl2 then
+            return false
+        else
+            for index, value in ipairs(tbl1) do
+                if tbl2[index] ~= value then
+                    return false
+                end
+            end
+            return true
+        end
+    end
+
     local function parse_hashes(param)
         if param.TYPE == "struct" then
             for hash, node in ipairs(param.HASHES) do
@@ -212,15 +226,14 @@ else
 
     write_struct = function(struct)
         local start = f:seek() - 1
-        local ref_entry = {cor_struct = struct}
+        local ref_entry, dynamic_ref = {}, {}
         table.insert(ref_entries, ref_entry)
         writer.int(#struct.NODES)
-        -- after all structs are generated (with param offsets/etc)
-        -- we filter down ref_entries and fix each struct's reference to it
-        local dynamic_ref = {
-            pos_ = start + 5,
-            ref_ = ref_entry
-        }
+        
+        ref_entry.dyn_ref_ = dynamic_ref
+        dynamic_ref.pos_ = start + 5
+        dynamic_ref.ref_ = ref_entry
+
         table.insert(unresolved_structs, dynamic_ref)
         writer.int(0)
         for index, hash in ipairs(GET_SORTED_COPY(struct.HASHES)) do
@@ -287,11 +300,66 @@ else
     parse_hashes(PARAM_FILE.ROOT)
     write_param(PARAM_FILE.ROOT)
 
-    local i = 1
-    while i <= #ref_entries do
-        print("stub")
+    -- truncate duplicate ref_entries ; fix the dynamic ref_entry pointer
+    for current_index = 1, #ref_entries do
+        local a = ref_entries[current_index]
+        for i = current_index - 1, 1, -1 do
+            local b = ref_entries[i]
+            if type(a) == "table" and type(b) == "table" then
+                if table_equals(a, b) then
+                    a.dyn_ref_.ref_ = b
+                    table.remove(current_index)
+                    current_index = current_index - 1
+                    break
+                end
+            end
+        end
     end
 
-    --f:write("paracobn")
-    --writer.int()
+    local main_writer = require("writer")
+    local main_f = main_writer.open_write(filename)
+
+    main_f:write("paracobn")
+    local hash_size, ref_size
+    main_writer.long(0)--skip these two for now
+    for _, v in ipairs(hashes) do
+        main_writer.long(v)
+    end
+    hash_size = main_f:seek() - 0x10
+
+    local string_offsets = {}
+    local ref_start = f:seek()
+    for i = 1, #ref_entries do
+        local entry = ref_entries[i]
+        if type(entry) == "table" then
+            entry.offset_ = f:seek() - ref_start
+            for _, pair in ipairs(entry) do
+                main_writer.int(indexof(hashes, pair.hash_) - 1)
+                main_writer.int(pair.offset_)
+            end
+        elseif type(entry) == "string" then
+            string_offsets[entry] = f:seek() - ref_start
+            main_f:write(entry)
+            main_writer.byte(0)
+        end 
+    end
+    ref_size = f:seek() - ref_start
+
+    for _, dyn_ref in ipairs(unresolved_structs) do
+        f:seek("set", dyn_ref.pos_)
+        writer.int(dyn_ref.ref_.offset_)
+        dyn_ref.ref_.offset_ = nil
+    end
+
+    for _, i in ipairs(unresolved_strings) do
+        f:seek("set", i.pos_)
+        writer.int(string_offsets[i.str_])
+    end
+
+    main_f:seek("set", 8)
+    main_writer.int(hash_size)
+    main_writer.int(ref_size)
+
+    main_f:close()
+    f:close()
 end
