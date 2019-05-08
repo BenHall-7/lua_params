@@ -7,6 +7,7 @@ lua module capable of opening and saving Smash Ultimate param files via a table 
 OPEN(filename) returns param file object with a ROOT node
 
 nodes can be one of multiple types:
+
 ```lua
 TYPES = {
     "bool",
@@ -23,7 +24,8 @@ TYPES = {
     "struct"
 }
 ```
-each element is considered a table, and there are 3 categories depending on the type.
+
+each node is considered a table, and there are 3 categories depending on the type.
 
 structs:
 
