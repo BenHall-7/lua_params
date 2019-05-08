@@ -37,7 +37,6 @@ local hash_table = {
 local function crc32(string)
     local hash = 0xffffffff
     for i, c in utf8.codes(string) do
-        print(c)
         assert(c < 0x100, "char "..c.." in string "..string.." must be in utf8 format")
         hash = (hash >> 8) ~ hash_table[(c ~ hash) & 0xff]
     end
@@ -45,7 +44,7 @@ local function crc32(string)
 end
 
 function hash40_util.HASH40(word)
-    return (#word << 32) | crc32(word) & 0xffffffffff
+    return (#word << 32) | crc32(string.lower(word)) & 0xffffffffff
 end
 
 function hash40_util.LABEL2HASH(word, string_hash_table)
