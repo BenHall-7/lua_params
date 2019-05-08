@@ -1,6 +1,7 @@
 -- assumes lua version 5.3
+local param_util = {}
 
-TYPES = {
+param_util.TYPES = {
     "bool",
     "sbyte",
     "byte",
@@ -22,25 +23,13 @@ function GET_SORTED_COPY(tbl)
     return copy
 end
 
-function HELP()
+function param_util.HELP()
     print("args:")
     print("to open:", "'o [file name]'")
     print("to save:", "'s [file name] [param object]")
 end
 
-if (#arg < 2) then
-    HELP()
-    return
-end
-
-local mode, filename = arg[1], arg[2]
-if mode ~= "o" and mode ~= "s" then
-    print("invalid arg [#1]: mode")
-    HELP()
-    return
-end
-
-if mode == "o" then
+function param_util.OPEN(filename)
     local reader = dofile("reader.lua")
     local f = reader.open_read(filename)
     assert(f:read(8) == 'paracobn', "file '"..filename.."' contains invalid header")
@@ -63,7 +52,7 @@ if mode == "o" then
     local read_param, read_struct, read_list, read_value
 
     read_param = function()
-        local type = TYPES[reader:byte()]
+        local type = param_util.TYPES[reader:byte()]
 
         if (type == "struct") then
             return read_struct()
@@ -153,18 +142,15 @@ if mode == "o" then
 
     -- Read param data
     f:seek("set", param_pos)
-    assert(TYPES[reader.byte()] == "struct", "file does not contain a root element")
+    assert(param_util.TYPES[reader.byte()] == "struct", "file does not contain a root element")
     PARAM_FILE.ROOT = read_struct()
 
     return PARAM_FILE
-else
-    if #arg < 3 then
-        HELP()
-        return
-    end
+end
 
-    local writer = dofile("writer.lua")
-    local f = writer.open_write("param_data.temp")
+function param_util.SAVE(filename, param_obj)
+    local param_writer = dofile("writer.lua")
+    local param_f = param_writer.open_write_temp()
 
     local PARAM_FILE = arg[3]
     local hashes = {}
@@ -217,7 +203,7 @@ else
 
     write_param = function(param)
         local t = param.TYPE
-        writer.byte(indexof(TYPES, t))
+        param_writer.byte(indexof(param_util.TYPES, t))
         if t == "struct" then
             write_struct(param)
         elseif t == "list" then
@@ -228,80 +214,80 @@ else
     end
 
     write_struct = function(struct)
-        local start = f:seek() - 1
+        local start = param_f:seek() - 1
         local ref_entry, struct_id = {}, {}
         table.insert(ref_entries, ref_entry)
-        writer.int(#struct.HASHES)
+        param_writer.int(#struct.HASHES)
         
         ref_entry.struct_ = struct_id
         struct_id.pos_ = start + 5
         struct_id.ref_ = ref_entry
 
         table.insert(unresolved_structs, struct_id)
-        writer.int(0)
+        param_writer.int(0)
         for index, hash in ipairs(GET_SORTED_COPY(struct.HASHES)) do
             ref_entry[index] = {
                 hash_ = indexof(hashes, hash),
-                offset_ = f:seek() - start
+                offset_ = param_f:seek() - start
             }
             write_param(struct.NODES[hash])
         end
     end
 
     write_list = function(list)
-        local start, len = f:seek() - 1, #list.NODES
-        writer.int(len)
+        local start, len = param_f:seek() - 1, #list.NODES
+        param_writer.int(len)
 
         local offsets = {}
-        f:seek("cur", len * 4)
+        param_f:seek("cur", len * 4)
         for index, node in ipairs(list.NODES) do
-            offsets[index] = f:seek() - start
+            offsets[index] = param_f:seek() - start
             write_param(node)
         end
 
-        local last = f:seek()
-        f:seek("set", start + 5)
+        local last = param_f:seek()
+        param_f:seek("set", start + 5)
         for _, n in ipairs(offsets) do
-            writer.int(n)
+            param_writer.int(n)
         end
-        f:seek("set", last)
+        param_f:seek("set", last)
     end
 
     write_value = function(value)
         local type_ = value.TYPE
         if type_ == "bool" then
-            writer.bool(value.VALUE)
+            param_writer.bool(value.VALUE)
         elseif type_ == "sbyte" then
-            writer.sbyte(value.VALUE)
+            param_writer.sbyte(value.VALUE)
         elseif type_ == "byte" then
-            writer.byte(value.VALUE)
+            param_writer.byte(value.VALUE)
         elseif type_ == "short" then
-            writer.short(value.VALUE)
+            param_writer.short(value.VALUE)
         elseif type_ == "ushort" then
-            writer.ushort(value.VALUE)
+            param_writer.ushort(value.VALUE)
         elseif type_ == "int" then
-            writer.int(value.VALUE)
+            param_writer.int(value.VALUE)
         elseif type_ == "uint" then
-            writer.uint(value.VALUE)
+            param_writer.uint(value.VALUE)
         elseif type_ == "float" then
-            writer.float(value.VALUE)
+            param_writer.float(value.VALUE)
         elseif type_ == "hash40" then
-            writer.int(indexof(hashes, value.VALUE) - 1)
+            param_writer.int(indexof(hashes, value.VALUE) - 1)
         elseif type_ == "string" then
             local str = value.VALUE
             append_no_duplicate(ref_entries, str)
             local dynamic_ref = {
-                pos_ = f:seek(),
+                pos_ = param_f:seek(),
                 str_ = str
             }
             table.insert(unresolved_strings, dynamic_ref)
-            writer.int(0)
+            param_writer.int(0)
         end
     end
 
     append_no_duplicate(hashes, 0)
-    parse_hashes(PARAM_FILE.ROOT)
-    write_param(PARAM_FILE.ROOT)
+    parse_hashes(param_obj.ROOT)
+    write_param(param_obj.ROOT)
 
     -- truncate duplicate ref_entries ; fix the corresponding struct
     local current_index = 1
@@ -322,49 +308,56 @@ else
         current_index = current_index + 1
     end
 
-    local main_writer = dofile("writer.lua")
-    local main_f = main_writer.open_write(filename)
+    local header_writer = dofile("writer.lua")
+    local header_f = header_writer.open_write(filename)
 
-    main_f:write("paracobn")
+    header_f:write("paracobn")
     local hash_size, ref_size
-    main_writer.long(0)--skip these two for now
+    header_writer.long(0)--skip these two for now
     for _, v in ipairs(hashes) do
-        main_writer.long(v)
+        header_writer.long(v)
     end
-    hash_size = main_f:seek() - 0x10
+    hash_size = header_f:seek() - 0x10
 
     local string_offsets = {}
-    local ref_start = main_f:seek()
+    local ref_start = header_f:seek()
     for i = 1, #ref_entries do
         local entry = ref_entries[i]
         if type(entry) == "table" then
-            entry.offset_ = main_f:seek() - ref_start
+            entry.offset_ = header_f:seek() - ref_start
             for _, pair in ipairs(entry) do
-                main_writer.int(pair.hash_ - 1)
-                main_writer.int(pair.offset_)
+                header_writer.int(pair.hash_ - 1)
+                header_writer.int(pair.offset_)
             end
         elseif type(entry) == "string" then
-            string_offsets[entry] = main_f:seek() - ref_start
-            main_f:write(entry)
-            main_writer.byte(0)
+            string_offsets[entry] = header_f:seek() - ref_start
+            header_f:write(entry)
+            header_writer.byte(0)
         end 
     end
-    ref_size = f:seek() - ref_start
+    ref_size = header_f:seek() - ref_start
 
     for _, struct in ipairs(unresolved_structs) do
-        f:seek("set", struct.pos_)
-        writer.int(struct.ref_.offset_)
+        param_f:seek("set", struct.pos_)
+        param_writer.int(struct.ref_.offset_)
     end
 
     for _, i in ipairs(unresolved_strings) do
-        f:seek("set", i.pos_)
-        writer.int(string_offsets[i.str_])
+        param_f:seek("set", i.pos_)
+        param_writer.int(string_offsets[i.str_])
     end
 
-    main_f:seek("set", 8)
-    main_writer.int(hash_size)
-    main_writer.int(ref_size)
+    header_f:seek("set", 8)
+    header_writer.int(hash_size)
+    header_writer.int(ref_size)
+    header_f:seek("end", 0)
 
-    main_f:close()
-    f:close()
+    param_f:seek("set", 0)
+    local param_data = param_f:read("*a")
+    header_f:write(param_data)
+
+    header_f:close()
+    param_f:close()
 end
+
+return param_util

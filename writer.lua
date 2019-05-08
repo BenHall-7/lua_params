@@ -7,6 +7,11 @@ function writer.open_write(filename)
     return writer.file
 end
 
+function writer.open_write_temp()
+    writer.file = io.tmpfile()
+    return writer.file
+end
+
 function writer.bool(n)
     if n == true then
         writer.byte(1)
