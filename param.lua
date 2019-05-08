@@ -229,15 +229,15 @@ else
 
     write_struct = function(struct)
         local start = f:seek() - 1
-        local ref_entry, dynamic_ref = {}, {}
+        local ref_entry, struct_id = {}, {}
         table.insert(ref_entries, ref_entry)
-        writer.int(#struct.NODES)
+        writer.int(#struct.HASHES)
         
-        ref_entry.dyn_ref_ = dynamic_ref
-        dynamic_ref.pos_ = start + 5
-        dynamic_ref.ref_ = ref_entry
+        ref_entry.struct_ = struct_id
+        struct_id.pos_ = start + 5
+        struct_id.ref_ = ref_entry
 
-        table.insert(unresolved_structs, dynamic_ref)
+        table.insert(unresolved_structs, struct_id)
         writer.int(0)
         for index, hash in ipairs(GET_SORTED_COPY(struct.HASHES)) do
             ref_entry[index] = {
@@ -303,20 +303,23 @@ else
     parse_hashes(PARAM_FILE.ROOT)
     write_param(PARAM_FILE.ROOT)
 
-    -- truncate duplicate ref_entries ; fix the dynamic ref_entry pointer
-    for current_index = 1, #ref_entries do
-        local a = ref_entries[current_index]
-        if type(a) == "table" then
+    -- truncate duplicate ref_entries ; fix the corresponding struct
+    local current_index = 1
+    while current_index < #ref_entries do
+        local current = ref_entries[current_index]
+        if type(current) == "table" then
             for i = current_index - 1, 1, -1 do
-                local b = ref_entries[i]
-                if type(b) == "table" and ref_table_equals(a, b) then
-                    a.dyn_ref_.ref_ = b
+                local prev = ref_entries[i]
+                if type(prev) == "table" and ref_table_equals(current, prev) then
+                    current.struct_.ref_ = prev
                     table.remove(ref_entries, current_index)
                     current_index = current_index - 1
                     break
                 end
             end
+            current.struct_ = nil
         end
+        current_index = current_index + 1
     end
 
     local main_writer = dofile("writer.lua")
@@ -348,9 +351,9 @@ else
     end
     ref_size = f:seek() - ref_start
 
-    for _, dyn_ref in ipairs(unresolved_structs) do
-        f:seek("set", dyn_ref.pos_)
-        writer.int(dyn_ref.ref_.offset_)
+    for _, struct in ipairs(unresolved_structs) do
+        f:seek("set", struct.pos_)
+        writer.int(struct.ref_.offset_)
     end
 
     for _, i in ipairs(unresolved_strings) do
