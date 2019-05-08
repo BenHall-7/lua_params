@@ -295,7 +295,7 @@ function param_util.SAVE(filename, param_obj)
 
     -- truncate duplicate ref_entries ; fix the corresponding struct
     local current_index = 1
-    while current_index < #ref_entries do
+    while current_index <= #ref_entries do
         local current = ref_entries[current_index]
         if type(current) == "table" then
             for i = current_index - 1, 1, -1 do
