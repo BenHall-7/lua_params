@@ -4,6 +4,7 @@ lua module capable of opening and saving Smash Ultimate param files via a table 
 
 ### structure
 OPEN(filename) returns param file object with a ROOT element
+
 elements can be one of multiple types:
 ```lua
 TYPES = {
