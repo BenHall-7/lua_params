@@ -1,5 +1,9 @@
 -- assumes lua version 5.3
-local param_util = {}
+local param_util = {
+    _VERSION = "1.0",
+    _URL = "https://github.com/BenHall-7/lua_params",
+    _DESCRIPTION = "Opens or saves Smash Ultimate param files via a table structure"
+}
 
 param_util.TYPES = {
     "bool",
