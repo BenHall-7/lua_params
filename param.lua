@@ -20,17 +20,11 @@ param_util.TYPES = {
     "struct"
 }
 
-function GET_SORTED_COPY(tbl)
-    local copy = {}
-    for i, h in ipairs(tbl) do copy[i] = h end
-    table.sort(copy)
-    return copy
-end
-
 function param_util.HELP()
-    print("args:")
-    print("to open:", "'o [file name]'")
-    print("to save:", "'s [file name] [param object]")
+    print("opens or saves Smash Ultimate param files via tables")
+    print("OPEN(filename): returns param file object")
+    print("SAVE(filename, param): saves param file object")
+    print("refer to the README for structure and example usage")
 end
 
 function param_util.OPEN(filename)
@@ -186,6 +180,13 @@ function param_util.SAVE(filename, param_obj)
             end
             return true
         end
+    end
+
+    local function get_sorted_copy(tbl)
+        local copy = {}
+        for i, h in ipairs(tbl) do copy[i] = h end
+        table.sort(copy)
+        return copy
     end
 
     local function parse_hashes(param)
