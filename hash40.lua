@@ -47,8 +47,10 @@ function hash40_util.HASH40(word)
     return (#word << 32) | crc32(string.lower(word)) & 0xffffffffff
 end
 
-function hash40_util.LABEL2HASH(word, string_hash_table)
-    return string_hash_table[word]
+function hash40_util.LABEL2HASH(label, string_hash_table)
+    local hash = string_hash_table[label]
+    if hash then return hash end
+    return tonumber(hash)
 end
 
 function hash40_util.HASH2LABEL(hash, hash_string_table)

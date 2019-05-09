@@ -16,8 +16,7 @@ for _, struct in ipairs(list.NODES) do
         "landing_attack_air_frame_lw",
     }
     for __, name in ipairs(names) do
-        local hash = s2h[name]
-        local param = nodes[hash]
+        local param = nodes[s2h[name]]
         param.VALUE = math.floor(param.VALUE / 2)
     end
 end
