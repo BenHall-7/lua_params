@@ -230,7 +230,7 @@ function param_util.SAVE(filename, param_obj)
 
         table.insert(unresolved_structs, struct_id)
         param_writer.int(0)
-        for index, hash in ipairs(GET_SORTED_COPY(struct.HASHES)) do
+        for index, hash in ipairs(get_sorted_copy(struct.HASHES)) do
             ref_entry[index] = {
                 hash_ = indexof(hashes, hash),
                 offset_ = param_f:seek() - start
