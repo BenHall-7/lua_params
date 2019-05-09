@@ -57,4 +57,22 @@ function hash40_util.HASH2LABEL(hash, hash_string_table)
     return "0x"..string.format("%010x", hash)
 end
 
+function hash40_util.LOAD_HASH_STRING_TBL(filename)
+    local tbl = {}
+    for l in io.lines(filename) do
+        local hash, word = string.match(l, "([^,]+),([^,]*)")
+        tbl[tonumber(hash)] = word
+    end
+    return tbl
+end
+
+function hash40_util.LOAD_STRING_HASH_TBL(filename)
+    local tbl = {}
+    for l in io.lines(filename) do
+        local hash, word = string.match(l, "([^,]+),([^,]*)")
+        tbl[word] = tonumber(hash)
+    end
+    return tbl
+end
+
 return hash40_util
