@@ -2,10 +2,10 @@
 --divides all landing lag values by 2
 PARAM_UTIL = require("param")
 H40 = require("hash40")
-local param = PARAM_UTIL.OPEN("fighter_param.prc")
+local root = PARAM_UTIL.OPEN("fighter_param.prc")
 local s2h = H40.LOAD_STRING_HASH_TBL("ParamLabels.csv")
 
-local list = param.ROOT.NODES[s2h["fighter_param_table"]]
+local list = root.NODES[s2h["fighter_param_table"]]
 for _, struct in ipairs(list.NODES) do
     local nodes = struct.NODES
     local names = {
@@ -20,4 +20,4 @@ for _, struct in ipairs(list.NODES) do
         param.VALUE = math.floor(param.VALUE / 2)
     end
 end
-PARAM_UTIL.SAVE("fighter_param_new.prc", param)
+PARAM_UTIL.SAVE("fighter_param_new.prc", root)

@@ -33,8 +33,6 @@ function param_util.OPEN(filename)
     assert(f:read(8) == 'paracobn', "file '"..filename.."' contains invalid header")
     reader.file = f
 
-    local PARAM_FILE = {}
-
     -- read header
     local hash_pos, hash_size = 0x10, reader:int()
     local ref_pos, ref_size = hash_pos + hash_size, reader:int()
@@ -141,16 +139,15 @@ function param_util.OPEN(filename)
     -- Read param data
     f:seek("set", param_pos)
     assert(param_util.TYPES[reader.byte()] == "struct", "file does not contain a root element")
-    PARAM_FILE.ROOT = read_struct()
+    local ROOT = read_struct()
 
-    return PARAM_FILE
+    return ROOT
 end
 
-function param_util.SAVE(filename, param_obj)
+function param_util.SAVE(filename, root_struct)
     local param_writer = dofile("writer.lua")
     local param_f = param_writer.open_write_temp()
 
-    local PARAM_FILE = arg[3]
     local hashes = {}
     local ref_entries = {}
     local unresolved_structs = {}
@@ -291,8 +288,8 @@ function param_util.SAVE(filename, param_obj)
     end
 
     append_no_duplicate(hashes, 0)
-    parse_hashes(param_obj.ROOT)
-    write_param(param_obj.ROOT)
+    parse_hashes(root_struct)
+    write_param(root_struct)
 
     -- truncate duplicate ref_entries ; fix the corresponding struct
     local current_index = 1
