@@ -21,10 +21,12 @@ param_util.TYPES = {
 }
 
 function param_util.HELP()
-    print("opens or saves Smash Ultimate param files via tables")
-    print("OPEN(filename): returns param file object")
-    print("SAVE(filename, param): saves param file object")
-    print("refer to the README for structure and example usage")
+    print(param_util._DESCRIPTION)
+    print(param_util._URL)
+    print("OPEN(filename): returns param file")
+    print("SAVE(filename, param): saves param file")
+    print("refer to the README for structure")
+    print("see example.lua for example usage")
 end
 
 function param_util.OPEN(filename)
