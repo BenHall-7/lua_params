@@ -1,8 +1,8 @@
 -- assumes lua version 5.3
 local param_util = {
-    _VERSION = "1.0",
-    _URL = "https://github.com/BenHall-7/lua_params",
-    _DESCRIPTION = "Opens or saves Smash Ultimate param files via a table structure"
+    VERSION = "1.0",
+    URL = "https://github.com/BenHall-7/lua_params",
+    DESCRIPTION = "Opens or saves Smash Ultimate param files via a table structure"
 }
 
 param_util.TYPES = {
@@ -111,7 +111,6 @@ function param_util.OPEN(filename)
     end
 
     read_value = function(type_)
-        assert(type(type_) == "string", "this shouldn't fail")
         local param = {TYPE = type_}
         if type_ == "bool" then
             param.VALUE = reader.bool()
