@@ -21,8 +21,8 @@ param_util.TYPES = {
 }
 
 function param_util.HELP()
-    print(param_util._DESCRIPTION)
-    print(param_util._URL)
+    print(param_util.DESCRIPTION)
+    print(param_util.URL)
     print("OPEN(filename): returns param file")
     print("SAVE(filename, param): saves param file")
     print("refer to the README for structure")
