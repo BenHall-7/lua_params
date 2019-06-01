@@ -43,104 +43,87 @@ function param_util.OPEN(filename)
     -- read hashes
     local hashes = {}
     for i = 1, hash_size / 8 do
-        hashes[i] = reader:long()
+        hashes[i] = reader.long()
     end
 
-    -- recursive read
-    local read_param, read_struct, read_list, read_value
+    local bool   = reader.bool
+    local sbyte  = reader.sbyte
+    local byte   = reader.byte
+    local short  = reader.short
+    local ushort = reader.ushort
+    local int    = reader.int
+    local uint   = reader.uint
+    local float  = reader.float
+    local string = reader.string
 
-    read_param = function()
-        local type = param_util.TYPES[reader:byte()]
+    local read_funcs
 
-        if (type == "struct") then
-            return read_struct()
-        elseif (type == "list") then
-            return read_list()
-        else
-            return read_value(type)
-        end
-    end
-
-    read_struct = function()
-        local struct = {TYPE = "struct"}
-        local start, size, ref_offset =  f:seek() - 1, reader.int(), reader.int()
-        f:seek("set", ref_pos + ref_offset)
-
-        -- "indices" = array of hash indices so that we can sort/iterate with it
-        -- "nodes" = dictionary of hash/offsets
-        local indices, nodes = {}, {}
-        for i = 1, size do
-            local hash_index = reader.int() + 1
-            local node_offset = reader.int()
-            
-            indices[i] = hash_index
-            nodes[hashes[hash_index]] = node_offset
-        end
-        table.sort(indices)
-        -- we replace each hash index with the true hash
-        for a, b in ipairs(indices) do
-            indices[a] = hashes[b]
-        end
-        -- similarly, we replace each offset with a node
-        for hash, offset in pairs(nodes) do
-            f:seek("set", start + offset)
-            nodes[hash] = read_param()
-        end
-
-        struct.NODES = nodes
-        struct.HASHES = indices
-        return struct
-    end
-
-    read_list = function()
-        local list = {TYPE = "list"}
-        local start, size =  f:seek() - 1, reader.int()
-        local offsets = {}
-        for i = 1, size do
-            offsets[i] = reader.int()
-        end
-
-        local nodes = {}
-        for i = 1, size do
-            f:seek("set", start + offsets[i])
-            nodes[i] = read_param()
-        end
-
-        list.NODES = nodes
-        return list
-    end
-
-    read_value = function(type_)
-        local param = {TYPE = type_}
-        if type_ == "bool" then
-            param.VALUE = reader.bool()
-        elseif type_ == "sbyte" then
-            param.VALUE = reader.sbyte()
-        elseif type_ == "byte" then
-            param.VALUE = reader.byte()
-        elseif type_ == "short" then
-            param.VALUE = reader.short()
-        elseif type_ == "ushort" then
-            param.VALUE = reader.ushort()
-        elseif type_ == "int" then
-            param.VALUE = reader.int()
-        elseif type_ == "uint" then
-            param.VALUE = reader.uint()
-        elseif type_ == "float" then
-            param.VALUE = reader.float()
-        elseif type_ == "hash40" then
-            param.VALUE = hashes[reader.int() + 1]
-        elseif type_ == "string" then
-            param.VALUE = reader.string(ref_pos)
-        end
-
+    local function read_param()
+        local t = byte()
+        local param = {TYPE = param_util.TYPES[t]}
+        read_funcs[t](param)
         return param
     end
 
+    read_funcs = {
+        function(param) param.VALUE = bool() end,
+        function(param) param.VALUE = sbyte() end,
+        function(param) param.VALUE = byte() end,
+        function(param) param.VALUE = short() end,
+        function(param) param.VALUE = ushort() end,
+        function(param) param.VALUE = int() end,
+        function(param) param.VALUE = uint() end,
+        function(param) param.VALUE = float() end,
+        function(param) param.VALUE = hashes[int() + 1] end,
+        function(param) param.VALUE = string(ref_pos) end,
+        function(list)
+            local start, size =  f:seek() - 1, reader.int()
+            local offsets = {}
+            for i = 1, size do
+                offsets[i] = reader.int()
+            end
+
+            local nodes = {}
+            for i = 1, size do
+                f:seek("set", start + offsets[i])
+                nodes[i] = read_param()
+            end
+
+            list.NODES = nodes
+        end,
+        function(struct)
+            local start, size, ref_offset = f:seek() - 1, int(), int()
+            f:seek("set", ref_pos + ref_offset)
+
+            -- "indices" = array of hash indices so that we can sort/iterate with it
+            -- "nodes" = dictionary of hash/offsets
+            local indices, nodes = {}, {}
+            for i = 1, size do
+                local hash_index = int() + 1
+                local node_offset = int()
+                
+                indices[i] = hash_index
+                nodes[hashes[hash_index]] = node_offset
+            end
+            table.sort(indices)
+            -- we replace each hash index with the true hash
+            for a, b in ipairs(indices) do
+                indices[a] = hashes[b]
+            end
+            -- similarly, we replace each offset with a node
+            for hash, offset in pairs(nodes) do
+                f:seek("set", start + offset)
+                nodes[hash] = read_param()
+            end
+
+            struct.NODES = nodes
+            struct.HASHES = indices
+        end,
+    }
+
     -- Read param data
     f:seek("set", param_pos)
-    assert(param_util.TYPES[reader.byte()] == "struct", "file does not contain a root element")
-    local ROOT = read_struct()
+    local ROOT = read_param()
 
     return ROOT
 end
@@ -153,6 +136,11 @@ function param_util.SAVE(filename, root_struct)
     local ref_entries = {}
     local unresolved_structs = {}
     local unresolved_strings = {}
+
+    local type2num = {}
+    for i, t in ipairs(param_util.TYPES) do
+        type2num[t] = i
+    end
 
     local function indexof(tbl, value)
         for i, v in ipairs(tbl) do
@@ -202,81 +190,34 @@ function param_util.SAVE(filename, root_struct)
         end
     end
 
-    local write_param, write_struct, write_list, write_value
+    local bool   = param_writer.bool
+    local sbyte  = param_writer.sbyte
+    local byte   = param_writer.byte
+    local short  = param_writer.short
+    local ushort = param_writer.ushort
+    local int    = param_writer.int
+    local uint   = param_writer.uint
+    local float  = param_writer.float
 
-    write_param = function(param)
-        local t = param.TYPE
-        param_writer.byte(indexof(param_util.TYPES, t))
-        if t == "struct" then
-            write_struct(param)
-        elseif t == "list" then
-            write_list(param)
-        else
-            write_value(param)
-        end
+    local write_funcs
+
+    local function write_param(param)
+        local t = type2num[param.TYPE]
+        byte(t)
+        write_funcs[t](param)
     end
 
-    write_struct = function(struct)
-        local start = param_f:seek() - 1
-        local ref_entry, struct_id = {}, {}
-        table.insert(ref_entries, ref_entry)
-        param_writer.int(#struct.HASHES)
-        
-        ref_entry.struct_ = struct_id
-        struct_id.pos_ = start + 5
-        struct_id.ref_ = ref_entry
-
-        table.insert(unresolved_structs, struct_id)
-        param_writer.int(0)
-        for index, hash in ipairs(get_sorted_copy(struct.HASHES)) do
-            ref_entry[index] = {
-                hash_ = indexof(hashes, hash),
-                offset_ = param_f:seek() - start
-            }
-            write_param(struct.NODES[hash])
-        end
-    end
-
-    write_list = function(list)
-        local start, len = param_f:seek() - 1, #list.NODES
-        param_writer.int(len)
-
-        local offsets = {}
-        param_f:seek("cur", len * 4)
-        for index, node in ipairs(list.NODES) do
-            offsets[index] = param_f:seek() - start
-            write_param(node)
-        end
-
-        local last = param_f:seek()
-        param_f:seek("set", start + 5)
-        for _, n in ipairs(offsets) do
-            param_writer.int(n)
-        end
-        param_f:seek("set", last)
-    end
-
-    write_value = function(value)
-        local type_ = value.TYPE
-        if type_ == "bool" then
-            param_writer.bool(value.VALUE)
-        elseif type_ == "sbyte" then
-            param_writer.sbyte(value.VALUE)
-        elseif type_ == "byte" then
-            param_writer.byte(value.VALUE)
-        elseif type_ == "short" then
-            param_writer.short(value.VALUE)
-        elseif type_ == "ushort" then
-            param_writer.ushort(value.VALUE)
-        elseif type_ == "int" then
-            param_writer.int(value.VALUE)
-        elseif type_ == "uint" then
-            param_writer.uint(value.VALUE)
-        elseif type_ == "float" then
-            param_writer.float(value.VALUE)
-        elseif type_ == "hash40" then
-            param_writer.int(indexof(hashes, value.VALUE) - 1)
-        elseif type_ == "string" then
+    write_funcs = {
+        function(value) bool(value.VALUE) end,
+        function(value) sbyte(value.VALUE) end,
+        function(value) byte(value.VALUE) end,
+        function(value) short(value.VALUE) end,
+        function(value) ushort(value.VALUE) end,
+        function(value) int(value.VALUE) end,
+        function(value) uint(value.VALUE) end,
+        function(value) float(value.VALUE) end,
+        function(value) int(indexof(hashes, value.VALUE) - 1) end,
+        function(value)
             local str = value.VALUE
             append_no_duplicate(ref_entries, str)
             local dynamic_ref = {
@@ -284,9 +225,47 @@ function param_util.SAVE(filename, root_struct)
                 str_ = str
             }
             table.insert(unresolved_strings, dynamic_ref)
-            param_writer.int(0)
+            int(0)
+        end,
+        function(list)
+            local start, len = param_f:seek() - 1, #list.NODES
+            int(len)
+    
+            local offsets = {}
+            param_f:seek("cur", len * 4)
+            for index, node in ipairs(list.NODES) do
+                offsets[index] = param_f:seek() - start
+                write_param(node)
+            end
+    
+            local last = param_f:seek()
+            param_f:seek("set", start + 5)
+            for _, n in ipairs(offsets) do
+                int(n)
+            end
+            param_f:seek("set", last)
+        end,
+        function(struct)
+            local start = param_f:seek() - 1
+            local ref_entry, struct_id = {}, {}
+            table.insert(ref_entries, ref_entry)
+            int(#struct.HASHES)
+            
+            ref_entry.struct_ = struct_id
+            struct_id.pos_ = start + 5
+            struct_id.ref_ = ref_entry
+    
+            table.insert(unresolved_structs, struct_id)
+            int(0)
+            for index, hash in ipairs(get_sorted_copy(struct.HASHES)) do
+                ref_entry[index] = {
+                    hash_ = indexof(hashes, hash),
+                    offset_ = param_f:seek() - start
+                }
+                write_param(struct.NODES[hash])
+            end
         end
-    end
+    }
 
     append_no_duplicate(hashes, 0)
     parse_hashes(root_struct)
